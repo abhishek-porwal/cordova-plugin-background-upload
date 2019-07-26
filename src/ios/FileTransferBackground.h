@@ -24,7 +24,6 @@
 @interface FileTransferBackground : CDVPlugin<FileUploadManagerDelegate>
 {
     CDVInvokedUrlCommand* pluginCommand;
-    NSTimeInterval lastProgressTimeStamp;
 }
 
 
