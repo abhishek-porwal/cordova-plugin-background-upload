@@ -86,7 +86,11 @@ NSString *const FormatTypeName[5] = {
     NSString* filePath  = payload[@"filePath"];
     NSDictionary*  headers = payload[@"headers"];
     NSDictionary* parameters = payload[@"parameters"];
+    BOOL multipart = [payload[@"multipart"] boolValue];
+    NSString* method = payload[@"method"];
     NSString* fileId = payload[@"id"];
+    NSError* copyError;
+    NSString *tmpFilePath;
     
     if (uploadUrl == nil) {
         return [self returnResult:command withMsg:@"invalid url" success:false];
@@ -109,6 +113,10 @@ NSString *const FormatTypeName[5] = {
     if (headers == nil) {
         headers = @{};
     }
+
+    if(method == nil) {
+        method = @"POST";
+    }
     
     FileUploadManager* uploader = [FileUploadManager sharedInstance];
     FileUpload* upload = [uploader getUploadById:fileId];
@@ -121,29 +129,41 @@ NSString *const FormatTypeName[5] = {
     NSURL * url = [NSURL URLWithString:uploadUrl];
     
     NSMutableURLRequest * request = [NSMutableURLRequest requestWithURL:url];
-    [request setHTTPMethod:@"POST"];
-    
-    
-    NSString *boundary = [NSString stringWithFormat:@"Boundary-%@", [[NSUUID UUID] UUIDString]];
-    
-    NSString *contentType = [NSString stringWithFormat:@"multipart/form-data; boundary=%@", boundary];
-    [request setValue:contentType forHTTPHeaderField: @"Content-Type"];
-    
-    
-    NSData *body = [self createBodyWithBoundary:boundary parameters:parameters paths:@[filePath] fieldName:payload[@"fileKey"]];
-    
+    [request setHTTPMethod:method];
+
     for (NSString *key in headers) {
         [request setValue:[headers objectForKey:key] forHTTPHeaderField:key];
     }
-    
-    
-    NSString *tmpFilePath = [NSTemporaryDirectory() stringByAppendingPathComponent:boundary];
-    if (![body writeToFile:tmpFilePath atomically:YES] ) {
-        
-        CDVPluginResult* pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR
-                                                      messageAsDictionary:@{ @"error" : @"Error writing temp file" }];
-        [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
-        return;
+
+    if(multipart) {
+        NSString *boundary = [NSString stringWithFormat:@"Boundary-%@", [[NSUUID UUID] UUIDString]];
+
+        NSString *contentType = [NSString stringWithFormat:@"multipart/form-data; boundary=%@", boundary];
+        [request setValue:contentType forHTTPHeaderField: @"Content-Type"];
+
+
+        NSData *body = [self createBodyWithBoundary:boundary parameters:parameters paths:@[filePath] fieldName:payload[@"fileKey"]];
+
+        tmpFilePath = [NSTemporaryDirectory() stringByAppendingPathComponent:boundary];
+        if (![body writeToFile:tmpFilePath atomically:YES] ) {
+
+            CDVPluginResult* pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR
+                                                          messageAsDictionary:@{ @"error" : @"Error writing temp file" }];
+            [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
+            return;
+        }
+    } else {
+
+        NSString *boundary = [NSString stringWithFormat:@"Binary-%@", [[NSUUID UUID] UUIDString]];
+        tmpFilePath = [NSTemporaryDirectory() stringByAppendingPathComponent:boundary];
+
+        if (![[NSFileManager defaultManager] copyItemAtPath:filePath toPath:tmpFilePath error:&copyError]) {
+
+            CDVPluginResult* pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR
+                                                          messageAsDictionary:@{ @"error" : @"Error writing temp file" }];
+            [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
+            return;
+        }
     }
     
     

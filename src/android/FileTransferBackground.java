@@ -10,6 +10,8 @@ import com.sromku.simple.storage.SimpleStorage;
 import com.sromku.simple.storage.Storage;
 import com.sromku.simple.storage.helpers.OrderType;
 
+import net.gotev.uploadservice.BinaryUploadRequest;
+import net.gotev.uploadservice.HttpUploadRequest;
 import net.gotev.uploadservice.MultipartUploadRequest;
 import net.gotev.uploadservice.ServerResponse;
 import net.gotev.uploadservice.UploadInfo;
@@ -182,11 +184,23 @@ public class FileTransferBackground extends CordovaPlugin {
 
     LogMessage("adding upload "+payload.id);
     this.createUploadInfoFile(payload.id, jsonPayload);
+    String method = jsonPayload.optString("method", "POST");
+    Boolean multipart = jsonPayload.optBoolean("multipart", false);
     if (NetworkMonitor.isConnected) {
 
-      MultipartUploadRequest request = new MultipartUploadRequest(this.cordova.getActivity().getApplicationContext(), payload.id,payload.serverUrl)
+      HttpUploadRequest request;
+
+      if (multipart) {
+        request = new MultipartUploadRequest(this.cordova.getActivity().getApplicationContext(), payload.id, payload.serverUrl)
               .addFileToUpload(payload.filePath, payload.fileKey)
               .setMaxRetries(0);
+
+      } else {
+        request = new BinaryUploadRequest(this.cordova.getActivity().getApplicationContext(), payload.id, payload.serverUrl)
+              .setFileToUpload(payload.filePath)
+              .setMethod(method)
+              .setMaxRetries(0);
+      }
 
       if (payload.showNotification) {
         UploadNotificationConfig config = new UploadNotificationConfig();
@@ -194,8 +208,8 @@ public class FileTransferBackground extends CordovaPlugin {
         config.getCancelled().autoClear = true;
         config.getError().autoClear = true;
         config.setClearOnActionForAllStatuses(true);
-        Intent intent = new Intent(cordova.getContext(), cordova.getActivity().getClass());
-        PendingIntent pendingIntent = PendingIntent.getActivity(cordova.getContext(), 0, intent, PendingIntent.FLAG_UPDATE_CURRENT);
+        Intent intent = new Intent(cordova.getActivity().getBaseContext(), cordova.getActivity().getClass());
+        PendingIntent pendingIntent = PendingIntent.getActivity(cordova.getActivity().getBaseContext(), 0, intent, PendingIntent.FLAG_UPDATE_CURRENT);
         config.setClickIntentForAllStatuses(pendingIntent);
         if (payload.notificationTitle != null)
           config.getProgress().title = payload.notificationTitle;
@@ -309,7 +323,7 @@ public class FileTransferBackground extends CordovaPlugin {
 
       UploadService.HTTP_STACK = new OkHttpStack();
       UploadService.UPLOAD_POOL_SIZE = 1;
-      UploadService.NAMESPACE = cordova.getContext().getPackageName();
+      UploadService.NAMESPACE = cordova.getActivity().getBaseContext().getPackageName();
       storage = SimpleStorage.getInternalStorage(this.cordova.getActivity().getApplicationContext());
       storage.createDirectory(uploadDirectoryName);
       LogMessage("created FileTransfer working directory ");
